@@ -1,5 +1,7 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
 from matplotlib.animation import FuncAnimation
 # Molecular Weight as a Function from the Plotted Graph.
 def get_MW(OF):
@@ -8,6 +10,17 @@ def get_MW(OF):
     for i in range(6):
         MW = MW + k[i]*OF**i
     return MW
+
+# ISP as a Function from the plotted graph.
+def get_ISP(OF_val):
+    if OF_val > 3.50:
+        OF_val = 3.5
+    data = pd.read_csv('graphs/ISP.csv')
+    ISP = data['ISP']
+    OF = data['OF']
+    f = interp1d(OF, ISP)
+    return f(OF_val)
+
 
 # Constants from your provided code
 m_dot_ox_i = 20  # kg/s
@@ -23,15 +36,22 @@ dt = 1  # Time step in seconds
 num_points = 20  # Number of spatial points
 L_x = np.linspace(L/40, L*(1 + L/40), num_points)  # Spatial distribution
 R_t = np.full((1, num_points), R_i)  # Initial radii (2D array with 1 row)
+ISP_t = [0]
 time = [0]  # Time array
-
-MW_t = np.full((1, num_points), 0)  # Initial radii (2D array with 1 row)
+MW_t = [0]
+T_t = [0]
+# MW_t = np.full((1, num_points), 0)  # Initial radii (2D array with 1 row)
 
 # Simulation loop
 i = 0
 while R_t[-1, 0] < R_f: # Compare only the last element in the last row
+
+    # Reset initiate data distributions along the length of the nozzle.
     R_x = np.zeros(num_points)
     MW_x = np.zeros(num_points)
+    ISP_x = np.zeros(num_points)
+
+    # Reset mass flow rates for each time step.
     m_dot_ox = m_dot_ox_i
     m_dot_f = 0
     for j, x in enumerate(L_x):
@@ -54,8 +74,18 @@ while R_t[-1, 0] < R_f: # Compare only the last element in the last row
         m_dot_f = rho_f*np.pi*R_x[j]**2*r_dot
 
         OF = m_dot_ox / m_dot_f
-
+        # print(i, j)
         MW_x[j] = get_MW(OF)
+        ISP_x[j] = get_ISP(OF)
+
+    # Calculate thrust
+    m_dot = m_dot_ox + m_dot_f
+    T = m_dot*ISP_x.mean()*g_o
+    T_t.append(T)
+
+    # Add mean values to time series of data.
+    MW_t.append(MW_x.mean())
+    ISP_t.append(ISP_x.mean())
 
     # Append new radii distribution
     R_t = np.vstack([R_t, R_x])
@@ -94,9 +124,19 @@ index_vals = [50, 100, 150, 200, i]
 plt.clf()
 
 for i in index_vals:
-    plt.plot(L_x, R_t[i], label = 'time = ' + str(time[i]))
+    plt.plot(L_x, R_t[i], label = 'time = ' + str(time[i]) + ' s')
 plt.xlabel("Position (m)")
 plt.ylabel("Radius (m)")
 plt.title("Radii Evolution Over Time")
 plt.legend(loc="upper right")
 plt.savefig('raddii_time_steps.png')
+
+
+# Plot thrust as a function of time
+plt.clf()
+plt.plot(time, T_t, label='Thrust')
+plt.xlabel("Time (s)")
+plt.ylabel("Thrust (N)")
+plt.title("Thrust as a Function of Time")
+plt.legend()
+plt.savefig('thrust_vs_time.png')
